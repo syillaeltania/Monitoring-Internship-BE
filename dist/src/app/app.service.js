@@ -20,6 +20,7 @@ const toDate = (value) => {
 };
 const monthStart = (year, month) => new Date(Date.UTC(year, month - 1, 1));
 const monthEnd = (year, month) => new Date(Date.UTC(year, month, 0));
+const closedPlanStatuses = ['ACTIVE', 'COMPLETED', 'COMPLETION_CHECKLIST_DONE'];
 const completionChecklistFlags = [
     'companyLaptopReturned',
     'idCardReturned',
@@ -52,13 +53,16 @@ let AppService = class AppService {
         const month = Number(query.month ?? today.getUTCMonth() + 1);
         const year = Number(query.year ?? today.getUTCFullYear());
         const monthCosts = interns.flatMap((intern) => intern.costs).filter((cost) => cost.month === month && cost.year === year);
+        const plannedTotal = await this.prisma.internshipPlan.count({
+            where: { processStatus: { notIn: [...closedPlanStatuses] } },
+        });
         return {
             summary: {
                 activeTotal: active.length,
                 activeInstitution: active.filter((item) => item.type === 'INSTITUTION').length,
                 activeProfessional: active.filter((item) => item.type === 'PROFESSIONAL').length,
                 completedTotal: normalized.filter((item) => item.computedStatus === 'COMPLETED').length,
-                plannedTotal: normalized.filter((item) => item.computedStatus === 'PLANNED').length,
+                plannedTotal,
                 endingIn30Days: active.filter((item) => {
                     const days = (item.endDate.getTime() - today.getTime()) / 86400000;
                     return days >= 0 && days <= 30;
