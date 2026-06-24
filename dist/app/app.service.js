@@ -1,0 +1,564 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+import { Injectable } from '@nestjs/common';
+import { calculateStatus, detectNotifications, evaluateReplacementStatus, formatDuration, } from '../domain/internship.logic.js';
+import { buildBackfillCostPayload, inferInstitutionMonthlyCost, inferProfessionalMonthlyCost, } from '../domain/cost-backfill.logic.js';
+import { importWorkbook } from '../import/excel-importer.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+const toDate = (value) => {
+    if (!value || typeof value !== 'string')
+        return undefined;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+const monthStart = (year, month) => new Date(Date.UTC(year, month - 1, 1));
+const monthEnd = (year, month) => new Date(Date.UTC(year, month, 0));
+const completionChecklistFlags = [
+    'companyLaptopReturned',
+    'idCardReturned',
+    'companyEmailClosed',
+    'gitAccountClosed',
+    'knowledgeAccountClosed',
+    'handoverCompleted',
+    'financeCleared',
+    'reportApproved',
+    'academyAccountClosed',
+    'leaderAssessmentFilled',
+    'internFeedbackFilled',
+    'workGroupsLeft',
+];
+let AppService = class AppService {
+    prisma;
+    constructor(prisma) {
+        this.prisma = prisma;
+    }
+    async getDashboard(query) {
+        await this.syncActivePlans();
+        const interns = await this.prisma.intern.findMany({ include: { costs: true, checklist: true } });
+        const requirements = await this.prisma.teamRequirement.findMany();
+        const today = new Date();
+        const normalized = interns.map((intern) => ({
+            ...intern,
+            computedStatus: calculateStatus(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10), today, intern.manualStatus === 'TERMINATED'),
+        }));
+        const active = normalized.filter((item) => item.computedStatus === 'ACTIVE');
+        const month = Number(query.month ?? today.getUTCMonth() + 1);
+        const year = Number(query.year ?? today.getUTCFullYear());
+        const monthCosts = interns.flatMap((intern) => intern.costs).filter((cost) => cost.month === month && cost.year === year);
+        return {
+            summary: {
+                activeTotal: active.length,
+                activeInstitution: active.filter((item) => item.type === 'INSTITUTION').length,
+                activeProfessional: active.filter((item) => item.type === 'PROFESSIONAL').length,
+                completedTotal: normalized.filter((item) => item.computedStatus === 'COMPLETED').length,
+                plannedTotal: normalized.filter((item) => item.computedStatus === 'PLANNED').length,
+                endingIn30Days: active.filter((item) => {
+                    const days = (item.endDate.getTime() - today.getTime()) / 86400000;
+                    return days >= 0 && days <= 30;
+                }).length,
+                riskyTeams: requirements.filter((item) => item.replacementStatus !== 'COVERED').length,
+                currentMonthCost: monthCosts.reduce((sum, item) => sum + item.totalMonthlyCost, 0),
+            },
+            charts: {
+                byDivision: this.countBy(active, 'division'),
+                byType: this.countBy(active, 'type'),
+                monthlyCost: this.monthlyCostSeries(interns.flatMap((intern) => intern.costs)),
+            },
+            notifications: await this.getNotifications(),
+        };
+    }
+    async getInterns(query) {
+        await this.syncActivePlans();
+        const where = {
+            type: query.type ? query.type : undefined,
+            division: query.division ? { contains: query.division, mode: 'insensitive' } : undefined,
+        };
+        const interns = await this.prisma.intern.findMany({
+            where,
+            include: { checklist: true },
+            orderBy: [{ division: 'asc' }, { team: 'asc' }, { name: 'asc' }],
+        });
+        return interns.map((intern) => ({
+            ...intern,
+            status: calculateStatus(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10), new Date(), intern.manualStatus === 'TERMINATED'),
+            durationLabel: intern.durationLabel ?? formatDuration(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10)),
+        }));
+    }
+    async createIntern(body) {
+        const startDate = toDate(body.startDate) ?? new Date();
+        const endDate = toDate(body.endDate) ?? new Date();
+        return this.prisma.intern.create({
+            data: {
+                name: String(body.name ?? ''),
+                type: body.type === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'INSTITUTION',
+                institution: String(body.institution ?? ''),
+                major: String(body.major ?? ''),
+                division: String(body.division ?? ''),
+                team: String(body.team ?? ''),
+                position: String(body.position ?? ''),
+                leader: String(body.leader ?? ''),
+                location: String(body.location ?? ''),
+                startDate,
+                endDate,
+                durationLabel: formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
+                phone: String(body.phone ?? ''),
+                email: String(body.email ?? ''),
+                notes: String(body.notes ?? ''),
+            },
+        });
+    }
+    async updateIntern(id, body) {
+        const data = this.buildInternUpdateData(body);
+        return this.prisma.intern.update({
+            where: { id },
+            data,
+        });
+    }
+    async deleteIntern(id) {
+        return this.prisma.intern.delete({
+            where: { id },
+        });
+    }
+    async getCosts(query) {
+        const month = query.month ? Number(query.month) : undefined;
+        const year = query.year ? Number(query.year) : undefined;
+        const costs = await this.prisma.monthlyCost.findMany({
+            where: {
+                month,
+                year,
+                intern: query.type ? { type: query.type } : undefined,
+            },
+            include: { intern: true, benefitScheme: true },
+            orderBy: [{ year: 'desc' }, { month: 'desc' }],
+        });
+        const completedCosts = month && year ? await this.completeMonthlyCostsFromMasterData(costs, month, year, query) : costs;
+        const statusDate = month && year ? monthEnd(year, month) : new Date();
+        const filteredCosts = completedCosts
+            .map((cost) => {
+            const status = calculateStatus(cost.intern.startDate.toISOString().slice(0, 10), cost.intern.endDate.toISOString().slice(0, 10), statusDate, cost.intern.manualStatus === 'TERMINATED');
+            return {
+                ...cost,
+                intern: {
+                    ...cost.intern,
+                    normalizedDivision: this.normalizeDivision(cost.intern.division),
+                    status,
+                },
+            };
+        })
+            .filter((cost) => !query.division || cost.intern.normalizedDivision === query.division)
+            .filter((cost) => !query.status || cost.intern.status === query.status);
+        return {
+            rows: filteredCosts,
+            byDivision: this.sumCosts(filteredCosts, (item) => item.intern.normalizedDivision || item.intern.division),
+            byType: this.sumCosts(filteredCosts, (item) => item.intern.type),
+            total: filteredCosts.reduce((sum, item) => sum + item.totalMonthlyCost, 0),
+        };
+    }
+    async updateMonthlyCost(internId, year, month, body) {
+        const baseSalary = this.toNonNegativeInt(body.baseSalary);
+        const totalMealAllowance = this.toNonNegativeInt(body.totalMealAllowance);
+        const totalMonthlyCost = baseSalary + totalMealAllowance;
+        const attendanceDays = totalMealAllowance > 0 ? Math.round(totalMealAllowance / 25000) : 0;
+        const data = {
+            baseSalary,
+            mealAllowancePerDay: 25000,
+            workingDays: attendanceDays || 20,
+            attendanceDays,
+            totalMealAllowance,
+            totalMonthlyCost,
+        };
+        return this.prisma.monthlyCost.upsert({
+            where: {
+                internId_month_year: {
+                    internId,
+                    month,
+                    year,
+                },
+            },
+            create: {
+                internId,
+                month,
+                year,
+                ...data,
+            },
+            update: data,
+        });
+    }
+    async completeMonthlyCostsFromMasterData(costs, month, year, query) {
+        const existingInternIds = new Set(costs.map((cost) => cost.internId));
+        const activeInterns = await this.prisma.intern.findMany({
+            where: {
+                type: query.type ? query.type : undefined,
+                startDate: { lte: monthEnd(year, month) },
+                endDate: { gte: monthStart(year, month) },
+            },
+            include: {
+                costs: {
+                    orderBy: [{ year: 'desc' }, { month: 'desc' }],
+                },
+            },
+            orderBy: [{ division: 'asc' }, { team: 'asc' }, { name: 'asc' }],
+        });
+        const generatedCosts = activeInterns
+            .filter((intern) => !existingInternIds.has(intern.id))
+            .map((intern) => {
+            const existingCosts = intern.costs.map((cost) => ({ totalMonthlyCost: cost.totalMonthlyCost }));
+            const monthlyCost = intern.type === 'INSTITUTION'
+                ? inferInstitutionMonthlyCost(existingCosts, year)
+                : inferProfessionalMonthlyCost(existingCosts);
+            return {
+                id: `master-${intern.id}-${year}-${month}`,
+                internId: intern.id,
+                benefitSchemeId: null,
+                ...buildBackfillCostPayload(intern.type, month, year, monthlyCost),
+                intern,
+                benefitScheme: null,
+            };
+        });
+        return [...costs, ...generatedCosts];
+    }
+    async getReplacement() {
+        const rows = await this.prisma.teamRequirement.findMany({ orderBy: [{ division: 'asc' }, { team: 'asc' }] });
+        return rows.map((row) => ({
+            ...row,
+            replacementStatus: evaluateReplacementStatus({
+                activeInstitutionCount: row.activeInstitutionCount,
+                soonestEndDate: row.soonestEndDate,
+                replacementCandidate: row.replacementCandidate,
+                minimumInstitutionNeed: row.minimumInstitutionNeed,
+            }),
+        }));
+    }
+    async getPlans(query) {
+        await this.syncActivePlans();
+        return this.prisma.internshipPlan.findMany({
+            where: {
+                type: query.type ? query.type : undefined,
+            },
+            orderBy: [{ plannedStartDate: 'asc' }],
+        });
+    }
+    async syncActivePlans(today = new Date()) {
+        const current = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+        const plans = await this.prisma.internshipPlan.findMany({
+            where: {
+                plannedStartDate: { lte: current },
+                plannedEndDate: { gte: current },
+                processStatus: { notIn: ['COMPLETED', 'COMPLETION_CHECKLIST_DONE'] },
+                sourceSheet: 'Manual Rencana Magang',
+            },
+        });
+        for (const plan of plans) {
+            const startDate = plan.plannedStartDate;
+            const endDate = plan.plannedEndDate;
+            await this.prisma.intern.upsert({
+                where: {
+                    name_type_startDate_endDate: {
+                        name: plan.name,
+                        type: plan.type,
+                        startDate,
+                        endDate,
+                    },
+                },
+                create: {
+                    name: plan.name,
+                    type: plan.type,
+                    institution: plan.institution ?? '',
+                    major: plan.major ?? '',
+                    division: plan.targetDivision,
+                    team: plan.targetTeam,
+                    position: '',
+                    leader: plan.leader ?? '',
+                    location: '',
+                    startDate,
+                    endDate,
+                    durationLabel: formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
+                    phone: plan.phone ?? '',
+                    email: '',
+                    notes: plan.notes ?? '',
+                    acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
+                    sourceSheet: plan.sourceSheet ?? 'Rencana Magang',
+                },
+                update: {
+                    institution: plan.institution ?? '',
+                    major: plan.major ?? '',
+                    division: plan.targetDivision,
+                    team: plan.targetTeam,
+                    leader: plan.leader ?? '',
+                    phone: plan.phone ?? '',
+                    notes: plan.notes ?? '',
+                    acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
+                },
+            });
+            if (plan.processStatus !== 'ACTIVE') {
+                await this.prisma.internshipPlan.update({
+                    where: { id: plan.id },
+                    data: { processStatus: 'ACTIVE' },
+                });
+            }
+        }
+    }
+    async createPlan(body) {
+        const plannedStartDate = toDate(body.plannedStartDate) ?? new Date();
+        const plannedEndDate = toDate(body.plannedEndDate) ?? plannedStartDate;
+        return this.prisma.internshipPlan.create({
+            data: {
+                name: String(body.name ?? ''),
+                type: body.type === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'INSTITUTION',
+                institution: String(body.institution ?? ''),
+                major: String(body.major ?? ''),
+                targetDivision: String(body.targetDivision ?? ''),
+                targetTeam: String(body.targetTeam ?? ''),
+                leader: String(body.leader ?? ''),
+                acceptanceLetterDate: toDate(body.acceptanceLetterDate),
+                plannedStartDate,
+                plannedEndDate,
+                documentStatus: String(body.documentStatus ?? ''),
+                onboardingStatus: String(body.onboardingStatus ?? ''),
+                processStatus: 'WAITING_JOIN',
+                phone: String(body.phone ?? ''),
+                notes: String(body.notes ?? ''),
+                sourceSheet: 'Manual Rencana Magang',
+            },
+        });
+    }
+    async updatePlanStatus(id, body) {
+        const status = body.processStatus;
+        const validStatuses = [
+            'REQUEST_RECEIVED',
+            'SCREENING',
+            'ACCEPTED',
+            'ACCEPTANCE_LETTER_SENT',
+            'WAITING_JOIN',
+            'ACTIVE',
+            'COMPLETED',
+            'COMPLETION_CHECKLIST_DONE',
+        ];
+        if (typeof status !== 'string' || !validStatuses.includes(status)) {
+            throw new Error('Invalid process status');
+        }
+        return this.prisma.internshipPlan.update({
+            where: { id },
+            data: { processStatus: status },
+        });
+    }
+    async getCompletion(today = new Date()) {
+        const interns = await this.prisma.intern.findMany({
+            include: { checklist: true },
+            orderBy: [{ endDate: 'asc' }, { name: 'asc' }],
+        });
+        return interns
+            .filter((intern) => calculateStatus(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10), today, intern.manualStatus === 'TERMINATED') === 'ACTIVE')
+            .map((intern) => ({
+            id: intern.checklist?.id ?? `pending-${intern.id}`,
+            internId: intern.id,
+            ...Object.fromEntries(completionChecklistFlags.map((flag) => [flag, intern.checklist?.[flag] ?? false])),
+            finalStatus: intern.checklist?.finalStatus ?? 'Belum Lengkap',
+            notes: intern.checklist?.notes ?? '',
+            intern,
+        }));
+    }
+    async updateCompletion(internId, body) {
+        const complete = completionChecklistFlags.every((flag) => body[flag] === true);
+        const flagData = Object.fromEntries(completionChecklistFlags.map((flag) => [flag, body[flag] === true]));
+        const checklist = await this.prisma.completionChecklist.upsert({
+            where: { internId },
+            create: {
+                internId,
+                ...flagData,
+                finalStatus: complete ? 'Lengkap' : 'Belum Lengkap',
+                notes: String(body.notes ?? ''),
+            },
+            update: {
+                ...flagData,
+                finalStatus: complete ? 'Lengkap' : 'Belum Lengkap',
+                notes: String(body.notes ?? ''),
+            },
+        });
+        if (complete) {
+            const intern = await this.prisma.intern.findUnique({ where: { id: internId } });
+            if (intern) {
+                await this.prisma.internshipPlan.updateMany({
+                    where: {
+                        name: intern.name,
+                        type: intern.type,
+                        plannedStartDate: intern.startDate,
+                    },
+                    data: { processStatus: 'COMPLETED' },
+                });
+            }
+        }
+        return checklist;
+    }
+    async getOrganization() {
+        const units = await this.prisma.organizationUnit.findMany({ orderBy: [{ orderNo: 'asc' }, { name: 'asc' }] });
+        const interns = await this.getInterns({});
+        return { units, activeInterns: interns.filter((item) => item.status === 'ACTIVE') };
+    }
+    async getNotifications() {
+        const interns = await this.getInterns({});
+        const requirements = await this.prisma.teamRequirement.findMany();
+        return detectNotifications({
+            interns: interns.map((intern) => ({
+                id: intern.id,
+                name: intern.name,
+                startDate: intern.startDate.toISOString().slice(0, 10),
+                endDate: intern.endDate.toISOString().slice(0, 10),
+                status: intern.status,
+                type: intern.type,
+                division: intern.division,
+                team: intern.team,
+                acceptanceLetterSent: intern.acceptanceLetterSent,
+                completionComplete: intern.checklist?.finalStatus === 'Lengkap',
+            })),
+            teamRequirements: requirements,
+        });
+    }
+    async importExcel(path) {
+        const result = await importWorkbook(path, this.prisma);
+        await this.recalculateTeamRequirements();
+        return result;
+    }
+    countBy(items, key) {
+        return Object.entries(items.reduce((acc, item) => {
+            const label = String(item[key] ?? 'Unknown');
+            acc[label] = (acc[label] ?? 0) + 1;
+            return acc;
+        }, {})).map(([name, value]) => ({ name, value }));
+    }
+    monthlyCostSeries(costs) {
+        const grouped = costs.reduce((acc, item) => {
+            const key = `${item.year}-${String(item.month).padStart(2, '0')}`;
+            acc[key] = (acc[key] ?? 0) + item.totalMonthlyCost;
+            return acc;
+        }, {});
+        return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([month, value]) => ({ month, value }));
+    }
+    sumCosts(items, key) {
+        return Object.entries(items.reduce((acc, item) => {
+            const label = key(item);
+            acc[label] = (acc[label] ?? 0) + item.totalMonthlyCost;
+            return acc;
+        }, {})).map(([name, value]) => ({ name, value }));
+    }
+    normalizeDivision(value) {
+        const normalized = value.trim().toUpperCase().replace(/\s+/g, ' ');
+        if (normalized === 'NEW BUSINESS' || normalized === 'NB')
+            return 'NB';
+        if (normalized === 'TELCO')
+            return 'TELCO';
+        if (normalized === 'BUSDEV')
+            return 'BUSDEV';
+        if (normalized === 'CORE')
+            return 'CORE';
+        if (normalized === 'MSOS')
+            return 'MSOS';
+        return value;
+    }
+    toNonNegativeInt(value) {
+        const number = Number(value ?? 0);
+        if (!Number.isFinite(number) || number < 0)
+            return 0;
+        return Math.round(number);
+    }
+    buildInternUpdateData(body) {
+        const data = {};
+        const stringFields = [
+            'name',
+            'institution',
+            'major',
+            'division',
+            'team',
+            'position',
+            'leader',
+            'location',
+            'phone',
+            'email',
+            'notes',
+        ];
+        for (const field of stringFields) {
+            if (field in body)
+                data[field] = String(body[field] ?? '');
+        }
+        if (body.type === 'PROFESSIONAL' || body.type === 'INSTITUTION') {
+            data.type = body.type;
+        }
+        if (body.manualStatus === 'PLANNED' || body.manualStatus === 'ACTIVE' || body.manualStatus === 'COMPLETED' || body.manualStatus === 'TERMINATED') {
+            data.manualStatus = body.manualStatus;
+        }
+        else if (body.manualStatus === null || body.manualStatus === '') {
+            data.manualStatus = null;
+        }
+        const startDate = toDate(body.startDate);
+        const endDate = toDate(body.endDate);
+        if (startDate)
+            data.startDate = startDate;
+        if (endDate)
+            data.endDate = endDate;
+        if (startDate && endDate) {
+            data.durationLabel = formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10));
+        }
+        if ('acceptanceLetterSent' in body) {
+            data.acceptanceLetterSent = body.acceptanceLetterSent === true;
+        }
+        return data;
+    }
+    async recalculateTeamRequirements() {
+        const activeInterns = (await this.getInterns({})).filter((intern) => intern.status === 'ACTIVE');
+        const teams = new Map();
+        for (const intern of activeInterns) {
+            const key = `${intern.division}||${intern.team}`;
+            teams.set(key, [...(teams.get(key) ?? []), intern]);
+        }
+        for (const [key, interns] of teams) {
+            const [division, team] = key.split('||');
+            const institution = interns.filter((intern) => intern.type === 'INSTITUTION');
+            const professional = interns.filter((intern) => intern.type === 'PROFESSIONAL');
+            const soonest = institution.sort((a, b) => a.endDate.getTime() - b.endDate.getTime())[0];
+            await this.prisma.teamRequirement.upsert({
+                where: { division_team: { division, team } },
+                create: {
+                    division,
+                    team,
+                    leader: interns[0]?.leader,
+                    activeInstitutionCount: institution.length,
+                    activeProfessionalCount: professional.length,
+                    soonestEndDate: soonest?.endDate,
+                    endingInternName: soonest?.name,
+                    replacementStatus: evaluateReplacementStatus({
+                        activeInstitutionCount: institution.length,
+                        soonestEndDate: soonest?.endDate ?? null,
+                        replacementCandidate: null,
+                        minimumInstitutionNeed: 1,
+                    }),
+                },
+                update: {
+                    leader: interns[0]?.leader,
+                    activeInstitutionCount: institution.length,
+                    activeProfessionalCount: professional.length,
+                    soonestEndDate: soonest?.endDate,
+                    endingInternName: soonest?.name,
+                    replacementStatus: evaluateReplacementStatus({
+                        activeInstitutionCount: institution.length,
+                        soonestEndDate: soonest?.endDate ?? null,
+                        replacementCandidate: null,
+                        minimumInstitutionNeed: 1,
+                    }),
+                },
+            });
+        }
+    }
+};
+AppService = __decorate([
+    Injectable(),
+    __metadata("design:paramtypes", [PrismaService])
+], AppService);
+export { AppService };
+//# sourceMappingURL=app.service.js.map
