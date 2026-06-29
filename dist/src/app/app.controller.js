@@ -56,6 +56,9 @@ let AppController = class AppController {
     updatePlanStatus(id, body) {
         return this.appService.updatePlanStatus(id, body);
     }
+    deletePlan(id) {
+        return this.appService.deletePlan(id);
+    }
     completion() {
         return this.appService.getCompletion();
     }
@@ -160,6 +163,13 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], AppController.prototype, "updatePlanStatus", null);
+__decorate([
+    Delete('plans/:id'),
+    __param(0, Param('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "deletePlan", null);
 __decorate([
     Get('completion'),
     __metadata("design:type", Function),

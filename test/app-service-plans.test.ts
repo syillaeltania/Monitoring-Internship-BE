@@ -156,6 +156,48 @@ test('updatePlanStatus updates internship plan process status', async () => {
   assert.deepEqual(receivedData, { processStatus: 'COMPLETED' });
 });
 
+test('updatePlanStatus updates editable internship plan fields', async () => {
+  let receivedData: Record<string, unknown> | undefined;
+  const service = new AppService({
+    internshipPlan: {
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        receivedData = data;
+        return { id: 'plan-1', ...data };
+      },
+    },
+  } as never);
+
+  await service.updatePlanStatus('plan-1', {
+    name: 'Updated Candidate',
+    type: 'PROFESSIONAL',
+    institution: 'Tel-U',
+    major: 'Sistem Informasi',
+    targetDivision: 'MSOS',
+    targetTeam: 'SQ',
+    leader: 'Agung Laksono',
+    acceptanceLetterDate: '2026-06-20',
+    plannedStartDate: '2026-07-01',
+    plannedEndDate: '2026-12-31',
+    documentStatus: 'Lengkap',
+    onboardingStatus: 'Belum onboarding',
+    processStatus: 'ACCEPTED',
+    phone: '08123',
+    notes: 'Updated note',
+  });
+
+  assert.equal(receivedData?.name, 'Updated Candidate');
+  assert.equal(receivedData?.type, 'PROFESSIONAL');
+  assert.equal(receivedData?.targetDivision, 'MSOS');
+  assert.equal(receivedData?.targetTeam, 'SQ');
+  assert.equal(receivedData?.leader, 'Agung Laksono');
+  assert.equal(receivedData?.documentStatus, 'Lengkap');
+  assert.equal(receivedData?.onboardingStatus, 'Belum onboarding');
+  assert.equal(receivedData?.processStatus, 'ACCEPTED');
+  assert.equal((receivedData?.acceptanceLetterDate as Date).toISOString(), '2026-06-20T00:00:00.000Z');
+  assert.equal((receivedData?.plannedStartDate as Date).toISOString(), '2026-07-01T00:00:00.000Z');
+  assert.equal((receivedData?.plannedEndDate as Date).toISOString(), '2026-12-31T00:00:00.000Z');
+});
+
 test('updatePlanStatus rejects invalid process status values', async () => {
   const service = new AppService({
     internshipPlan: {

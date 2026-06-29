@@ -74,6 +74,11 @@ export class AppController {
     return this.appService.updatePlanStatus(id, body);
   }
 
+  @Delete('plans/:id')
+  deletePlan(@Param('id') id: string) {
+    return this.appService.deletePlan(id);
+  }
+
   @Get('completion')
   completion() {
     return this.appService.getCompletion();

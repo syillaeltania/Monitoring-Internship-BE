@@ -24,6 +24,16 @@ const toDate = (value: unknown): Date | undefined => {
 const monthStart = (year: number, month: number): Date => new Date(Date.UTC(year, month - 1, 1));
 const monthEnd = (year: number, month: number): Date => new Date(Date.UTC(year, month, 0));
 const closedPlanStatuses = ['ACTIVE', 'COMPLETED', 'COMPLETION_CHECKLIST_DONE'] as const;
+const validPlanStatuses = [
+  'REQUEST_RECEIVED',
+  'SCREENING',
+  'ACCEPTED',
+  'ACCEPTANCE_LETTER_SENT',
+  'WAITING_JOIN',
+  'ACTIVE',
+  'COMPLETED',
+  'COMPLETION_CHECKLIST_DONE',
+] as const;
 const completionChecklistFlags = [
   'companyLaptopReturned',
   'idCardReturned',
@@ -384,23 +394,36 @@ export class AppService {
 
   async updatePlanStatus(id: string, body: Record<string, unknown>) {
     const status = body.processStatus;
-    const validStatuses = [
-      'REQUEST_RECEIVED',
-      'SCREENING',
-      'ACCEPTED',
-      'ACCEPTANCE_LETTER_SENT',
-      'WAITING_JOIN',
-      'ACTIVE',
-      'COMPLETED',
-      'COMPLETION_CHECKLIST_DONE',
-    ];
-    if (typeof status !== 'string' || !validStatuses.includes(status)) {
+    if (status !== undefined && (typeof status !== 'string' || !validPlanStatuses.includes(status as (typeof validPlanStatuses)[number]))) {
       throw new Error('Invalid process status');
     }
 
+    const data: Prisma.InternshipPlanUpdateInput = {};
+    if (body.name !== undefined) data.name = String(body.name ?? '');
+    if (body.type !== undefined) data.type = body.type === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'INSTITUTION';
+    if (body.institution !== undefined) data.institution = String(body.institution ?? '');
+    if (body.major !== undefined) data.major = String(body.major ?? '');
+    if (body.targetDivision !== undefined) data.targetDivision = String(body.targetDivision ?? '');
+    if (body.targetTeam !== undefined) data.targetTeam = String(body.targetTeam ?? '');
+    if (body.leader !== undefined) data.leader = String(body.leader ?? '');
+    if (body.acceptanceLetterDate !== undefined) data.acceptanceLetterDate = toDate(body.acceptanceLetterDate) ?? null;
+    if (body.plannedStartDate !== undefined) data.plannedStartDate = toDate(body.plannedStartDate) ?? new Date();
+    if (body.plannedEndDate !== undefined) data.plannedEndDate = toDate(body.plannedEndDate) ?? new Date();
+    if (body.documentStatus !== undefined) data.documentStatus = String(body.documentStatus ?? '');
+    if (body.onboardingStatus !== undefined) data.onboardingStatus = String(body.onboardingStatus ?? '');
+    if (body.phone !== undefined) data.phone = String(body.phone ?? '');
+    if (body.notes !== undefined) data.notes = String(body.notes ?? '');
+    if (typeof status === 'string') data.processStatus = status as Prisma.EnumProcessStatusFieldUpdateOperationsInput['set'];
+
     return this.prisma.internshipPlan.update({
       where: { id },
-      data: { processStatus: status as Prisma.EnumProcessStatusFieldUpdateOperationsInput['set'] },
+      data,
+    });
+  }
+
+  async deletePlan(id: string) {
+    return this.prisma.internshipPlan.delete({
+      where: { id },
     });
   }
 

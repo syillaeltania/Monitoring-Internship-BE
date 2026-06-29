@@ -314,6 +314,27 @@ export declare class AppController {
         onboardingStatus: string | null;
         processStatus: import("@prisma/client").$Enums.ProcessStatus;
     }>;
+    deletePlan(id: string): Promise<{
+        id: string;
+        name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        type: import("@prisma/client").$Enums.InternshipType;
+        institution: string | null;
+        major: string | null;
+        leader: string | null;
+        phone: string | null;
+        notes: string | null;
+        sourceSheet: string | null;
+        targetDivision: string;
+        targetTeam: string;
+        acceptanceLetterDate: Date | null;
+        plannedStartDate: Date;
+        plannedEndDate: Date;
+        documentStatus: string | null;
+        onboardingStatus: string | null;
+        processStatus: import("@prisma/client").$Enums.ProcessStatus;
+    }>;
     completion(): Promise<{
         finalStatus: string;
         notes: string;
