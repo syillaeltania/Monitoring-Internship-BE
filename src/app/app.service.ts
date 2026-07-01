@@ -310,53 +310,60 @@ export class AppService {
       where: {
         plannedStartDate: { lte: current },
         plannedEndDate: { gte: current },
-        processStatus: { notIn: ['COMPLETED', 'COMPLETION_CHECKLIST_DONE'] },
-        sourceSheet: 'Manual Rencana Magang',
+        processStatus: { notIn: ['ACTIVE', 'COMPLETED', 'COMPLETION_CHECKLIST_DONE'] },
       },
     });
 
     for (const plan of plans) {
       const startDate = plan.plannedStartDate;
       const endDate = plan.plannedEndDate;
-      await this.prisma.intern.upsert({
+      const existing = await this.prisma.intern.findFirst({
         where: {
-          name_type_startDate_endDate: {
-            name: plan.name,
-            type: plan.type,
-            startDate,
-            endDate,
-          },
-        },
-        create: {
           name: plan.name,
           type: plan.type,
-          institution: plan.institution ?? '',
-          major: plan.major ?? '',
-          division: plan.targetDivision,
-          team: plan.targetTeam,
-          position: '',
-          leader: plan.leader ?? '',
-          location: '',
           startDate,
-          endDate,
-          durationLabel: formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
-          phone: plan.phone ?? '',
-          email: '',
-          notes: plan.notes ?? '',
-          acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
-          sourceSheet: plan.sourceSheet ?? 'Rencana Magang',
-        },
-        update: {
-          institution: plan.institution ?? '',
-          major: plan.major ?? '',
-          division: plan.targetDivision,
-          team: plan.targetTeam,
-          leader: plan.leader ?? '',
-          phone: plan.phone ?? '',
-          notes: plan.notes ?? '',
-          acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
         },
       });
+
+      if (existing) {
+        await this.prisma.intern.update({
+          where: { id: existing.id },
+          data: {
+            institution: plan.institution ?? '',
+            major: plan.major ?? '',
+            division: plan.targetDivision,
+            team: plan.targetTeam,
+            leader: plan.leader ?? '',
+            phone: plan.phone ?? '',
+            notes: plan.notes ?? '',
+            acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
+            endDate,
+            durationLabel: formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
+          },
+        });
+      } else {
+        await this.prisma.intern.create({
+          data: {
+            name: plan.name,
+            type: plan.type,
+            institution: plan.institution ?? '',
+            major: plan.major ?? '',
+            division: plan.targetDivision,
+            team: plan.targetTeam,
+            position: '',
+            leader: plan.leader ?? '',
+            location: '',
+            startDate,
+            endDate,
+            durationLabel: formatDuration(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
+            phone: plan.phone ?? '',
+            email: '',
+            notes: plan.notes ?? '',
+            acceptanceLetterSent: Boolean(plan.acceptanceLetterDate),
+            sourceSheet: plan.sourceSheet ?? 'Rencana Magang',
+          },
+        });
+      }
 
       if (plan.processStatus !== 'ACTIVE') {
         await this.prisma.internshipPlan.update({
