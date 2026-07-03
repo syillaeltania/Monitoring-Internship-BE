@@ -282,6 +282,7 @@ export class AppService {
   }
 
   async getReplacement() {
+    await this.recalculateTeamRequirements();
     const rows = await this.prisma.teamRequirement.findMany({ orderBy: [{ division: 'asc' }, { team: 'asc' }] });
     return rows.map((row) => ({
       ...row,
@@ -304,7 +305,17 @@ export class AppService {
     });
   }
 
+  private syncPromise: Promise<void> | null = null;
+
   async syncActivePlans(today = new Date()) {
+    if (this.syncPromise) return this.syncPromise;
+    this.syncPromise = this._syncActivePlans(today).finally(() => {
+      this.syncPromise = null;
+    });
+    return this.syncPromise;
+  }
+
+  private async _syncActivePlans(today: Date) {
     const current = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const plans = await this.prisma.internshipPlan.findMany({
       where: {
@@ -617,50 +628,125 @@ export class AppService {
     return data;
   }
 
+  private recalcPromise: Promise<void> | null = null;
+
   private async recalculateTeamRequirements() {
+    if (this.recalcPromise) return this.recalcPromise;
+    this.recalcPromise = this._recalculateTeamRequirements().finally(() => {
+      this.recalcPromise = null;
+    });
+    return this.recalcPromise;
+  }
+
+  private async _recalculateTeamRequirements() {
     const activeInterns = (await this.getInterns({})).filter((intern) => intern.status === 'ACTIVE');
-    const teams = new Map<string, typeof activeInterns>();
-    for (const intern of activeInterns) {
-      const key = `${intern.division}||${intern.team}`;
-      teams.set(key, [...(teams.get(key) ?? []), intern]);
+
+    // 1. Reset counts of all existing requirements to 0
+    await this.prisma.teamRequirement.updateMany({
+      data: {
+        activeInstitutionCount: 0,
+        activeProfessionalCount: 0,
+        soonestEndDate: null,
+        endingInternName: null,
+      },
+    });
+
+    const configs = await this.prisma.teamRequirement.findMany();
+    const configMap = new Map<string, typeof configs[number]>();
+    const normalizeKey = (div: string, tm: string) => {
+      return `${div.trim().toUpperCase()}||${tm.trim()}`;
+    };
+
+    for (const config of configs) {
+      configMap.set(normalizeKey(config.division, config.team), config);
     }
 
-    for (const [key, interns] of teams) {
-      const [division, team] = key.split('||');
-      const institution = interns.filter((intern) => intern.type === 'INSTITUTION');
-      const professional = interns.filter((intern) => intern.type === 'PROFESSIONAL');
-      const soonest = institution.sort((a, b) => a.endDate.getTime() - b.endDate.getTime())[0];
-      await this.prisma.teamRequirement.upsert({
-        where: { division_team: { division, team } },
-        create: {
-          division,
-          team,
-          leader: interns[0]?.leader,
-          activeInstitutionCount: institution.length,
-          activeProfessionalCount: professional.length,
-          soonestEndDate: soonest?.endDate,
-          endingInternName: soonest?.name,
-          replacementStatus: evaluateReplacementStatus({
+    // 2. Group active interns by division and team
+    const internGroups = new Map<string, typeof activeInterns>();
+    for (const intern of activeInterns) {
+      const key = `${intern.division.trim().toUpperCase()}||${intern.team.trim()}`;
+      internGroups.set(key, [...(internGroups.get(key) ?? []), intern]);
+    }
+
+    const processedIds = new Set<string>();
+
+    for (const [key, groupInterns] of internGroups.entries()) {
+      const division = groupInterns[0].division;
+      const team = groupInterns[0].team;
+      const normalized = normalizeKey(division, team);
+
+      const institution = groupInterns.filter((i) => i.type === 'INSTITUTION');
+      const professional = groupInterns.filter((i) => i.type === 'PROFESSIONAL');
+      const soonest = [...institution].sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())[0];
+
+      // Find matching config
+      const config = configMap.get(normalized);
+      const minimumNeed = config ? config.minimumInstitutionNeed : 1;
+
+      if (config) {
+        processedIds.add(config.id);
+        await this.prisma.teamRequirement.update({
+          where: { id: config.id },
+          data: {
+            division, // Update division/team names to match active interns (fixing typos/casing!)
+            team,
+            leader: groupInterns[0]?.leader || config.leader || '',
             activeInstitutionCount: institution.length,
+            activeProfessionalCount: professional.length,
             soonestEndDate: soonest?.endDate ?? null,
-            replacementCandidate: null,
-            minimumInstitutionNeed: 1,
-          }),
-        },
-        update: {
-          leader: interns[0]?.leader,
-          activeInstitutionCount: institution.length,
-          activeProfessionalCount: professional.length,
-          soonestEndDate: soonest?.endDate,
-          endingInternName: soonest?.name,
-          replacementStatus: evaluateReplacementStatus({
+            endingInternName: soonest?.name ?? null,
+            replacementStatus: evaluateReplacementStatus({
+              activeInstitutionCount: institution.length,
+              soonestEndDate: soonest?.endDate ?? null,
+              replacementCandidate: config.replacementCandidate,
+              minimumInstitutionNeed: minimumNeed,
+            }),
+          },
+        });
+      } else {
+        await this.prisma.teamRequirement.create({
+          data: {
+            division,
+            team,
+            leader: groupInterns[0]?.leader || '',
             activeInstitutionCount: institution.length,
+            activeProfessionalCount: professional.length,
             soonestEndDate: soonest?.endDate ?? null,
-            replacementCandidate: null,
+            endingInternName: soonest?.name ?? null,
             minimumInstitutionNeed: 1,
-          }),
-        },
-      });
+            replacementStatus: evaluateReplacementStatus({
+              activeInstitutionCount: institution.length,
+              soonestEndDate: soonest?.endDate ?? null,
+              replacementCandidate: null,
+              minimumInstitutionNeed: 1,
+            }),
+          },
+        });
+      }
+    }
+
+    // 3. For remaining configs (which have 0 active interns), evaluate status or delete if default/unused
+    for (const config of configs) {
+      if (!processedIds.has(config.id)) {
+        const hasCustomConfig = config.minimumInstitutionNeed > 1 || Boolean(config.replacementCandidate?.trim()) || Boolean(config.notes?.trim());
+        if (!hasCustomConfig) {
+          await this.prisma.teamRequirement.delete({
+            where: { id: config.id },
+          });
+        } else {
+          await this.prisma.teamRequirement.update({
+            where: { id: config.id },
+            data: {
+              replacementStatus: evaluateReplacementStatus({
+                activeInstitutionCount: 0,
+                soonestEndDate: null,
+                replacementCandidate: config.replacementCandidate,
+                minimumInstitutionNeed: config.minimumInstitutionNeed,
+              }),
+            },
+          });
+        }
+      }
     }
   }
 }
