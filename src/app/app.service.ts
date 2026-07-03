@@ -220,8 +220,11 @@ export class AppService {
       const monthStartStr = new Date(Date.UTC(trendYear, m - 1, 1)).toISOString().slice(0, 10);
       const mStatusDate = new Date(Date.UTC(trendYear, m, 0));
        
-      let count = 0;
-      let monthCost = 0;
+      let countInstansi = 0;
+      let countProfesional = 0;
+      let costInstansi = 0;
+      let costProfesional = 0;
+
       for (const intern of activeInternsThisYear) {
         const internStart = intern.startDate.toISOString().slice(0, 10);
         const internEnd = intern.endDate.toISOString().slice(0, 10);
@@ -233,20 +236,37 @@ export class AppService {
           if (query.division && normalizedDiv !== query.division) continue;
           if (query.status && status !== query.status) continue;
              
-          count++;
-
+          let thisInternCost = 0;
           const existingCost = intern.costs.find(c => c.month === m && c.year === trendYear);
           if (existingCost) {
-            monthCost += existingCost.totalMonthlyCost;
+            thisInternCost = existingCost.totalMonthlyCost;
           } else {
             const existingCosts = intern.costs.map(c => ({ totalMonthlyCost: c.totalMonthlyCost }));
             const inferred = intern.type === 'INSTITUTION' ? inferInstitutionMonthlyCost(existingCosts, trendYear) : inferProfessionalMonthlyCost(existingCosts);
-            monthCost += inferred;
+            thisInternCost = inferred;
+          }
+
+          if (intern.type === 'INSTITUTION') {
+            countInstansi++;
+            costInstansi += thisInternCost;
+          } else {
+            countProfesional++;
+            costProfesional += thisInternCost;
           }
         }
       }
-      trend.push({ name: monthNames[m - 1], value: count });
-      costTrend.push({ name: monthNames[m - 1], value: monthCost });
+      
+      // If a specific type filter is used, we only want to show that type
+      if (query.type === 'INSTITUTION') {
+        trend.push({ name: monthNames[m - 1], Instansi: countInstansi });
+        costTrend.push({ name: monthNames[m - 1], Instansi: costInstansi });
+      } else if (query.type === 'PROFESSIONAL') {
+        trend.push({ name: monthNames[m - 1], Profesional: countProfesional });
+        costTrend.push({ name: monthNames[m - 1], Profesional: costProfesional });
+      } else {
+        trend.push({ name: monthNames[m - 1], Total: countInstansi + countProfesional, Instansi: countInstansi, Profesional: countProfesional });
+        costTrend.push({ name: monthNames[m - 1], Total: costInstansi + costProfesional, Instansi: costInstansi, Profesional: costProfesional });
+      }
     }
 
     return {

@@ -205,14 +205,38 @@ export declare class AppService {
             value: number;
         }[];
         total: number;
-        trend: {
+        trend: ({
             name: string;
-            value: number;
-        }[];
-        costTrend: {
+            Instansi: number;
+            Profesional?: undefined;
+            Total?: undefined;
+        } | {
             name: string;
-            value: number;
-        }[];
+            Profesional: number;
+            Instansi?: undefined;
+            Total?: undefined;
+        } | {
+            name: string;
+            Total: number;
+            Instansi: number;
+            Profesional: number;
+        })[];
+        costTrend: ({
+            name: string;
+            Instansi: number;
+            Profesional?: undefined;
+            Total?: undefined;
+        } | {
+            name: string;
+            Profesional: number;
+            Instansi?: undefined;
+            Total?: undefined;
+        } | {
+            name: string;
+            Total: number;
+            Instansi: number;
+            Profesional: number;
+        })[];
     }>;
     updateMonthlyCost(internId: string, year: number, month: number, body: Record<string, unknown>): Promise<{
         id: string;
