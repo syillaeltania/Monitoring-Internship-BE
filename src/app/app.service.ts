@@ -197,12 +197,65 @@ export class AppService {
       })
       .filter((cost) => !query.division || cost.intern.normalizedDivision === query.division)
       .filter((cost) => !query.status || cost.intern.status === query.status);
+    const trendYear = year ?? new Date().getFullYear();
+    const activeInternsThisYear = await this.prisma.intern.findMany({
+      where: {
+        startDate: { lte: new Date(`${trendYear}-12-31`) },
+        endDate: { gte: new Date(`${trendYear}-01-01`) },
+        type: query.type ? (query.type as Prisma.EnumInternshipTypeFilter<'Intern'>) : undefined,
+      },
+      include: { costs: true }
+    });
+
+    const trend = [];
+    const costTrend = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+    
+    const currentYear = new Date().getUTCFullYear();
+    const currentMonth = new Date().getUTCMonth() + 1;
+    const maxMonth = trendYear === currentYear ? currentMonth : 12;
+
+    for (let m = 1; m <= maxMonth; m++) {
+      const monthEndStr = new Date(Date.UTC(trendYear, m, 0)).toISOString().slice(0, 10);
+      const monthStartStr = new Date(Date.UTC(trendYear, m - 1, 1)).toISOString().slice(0, 10);
+      const mStatusDate = new Date(Date.UTC(trendYear, m, 0));
+       
+      let count = 0;
+      let monthCost = 0;
+      for (const intern of activeInternsThisYear) {
+        const internStart = intern.startDate.toISOString().slice(0, 10);
+        const internEnd = intern.endDate.toISOString().slice(0, 10);
+          
+        if (internStart <= monthEndStr && internEnd >= monthStartStr) {
+          const status = calculateStatus(internStart, internEnd, mStatusDate, intern.manualStatus === 'TERMINATED');
+          const normalizedDiv = this.normalizeDivision(intern.division);
+             
+          if (query.division && normalizedDiv !== query.division) continue;
+          if (query.status && status !== query.status) continue;
+             
+          count++;
+
+          const existingCost = intern.costs.find(c => c.month === m && c.year === trendYear);
+          if (existingCost) {
+            monthCost += existingCost.totalMonthlyCost;
+          } else {
+            const existingCosts = intern.costs.map(c => ({ totalMonthlyCost: c.totalMonthlyCost }));
+            const inferred = intern.type === 'INSTITUTION' ? inferInstitutionMonthlyCost(existingCosts, trendYear) : inferProfessionalMonthlyCost(existingCosts);
+            monthCost += inferred;
+          }
+        }
+      }
+      trend.push({ name: monthNames[m - 1], value: count });
+      costTrend.push({ name: monthNames[m - 1], value: monthCost });
+    }
 
     return {
       rows: filteredCosts,
       byDivision: this.sumCosts(filteredCosts, (item) => item.intern.normalizedDivision || item.intern.division),
       byType: this.sumCosts(filteredCosts, (item) => item.intern.type),
       total: filteredCosts.reduce((sum, item) => sum + item.totalMonthlyCost, 0),
+      trend,
+      costTrend,
     };
   }
 

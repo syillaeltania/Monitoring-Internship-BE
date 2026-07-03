@@ -34,8 +34,8 @@ export declare class AppService {
         durationLabel: string;
         checklist: {
             id: string;
-            notes: string | null;
             updatedAt: Date;
+            notes: string | null;
             internId: string;
             leaderEvaluationForm: boolean;
             completionForm: boolean;
@@ -58,12 +58,15 @@ export declare class AppService {
             finalStatus: string;
         } | null;
         id: string;
+        email: string | null;
         name: string;
+        division: string;
+        team: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
-        division: string;
-        team: string;
         position: string | null;
         leader: string | null;
         location: string | null;
@@ -71,21 +74,21 @@ export declare class AppService {
         endDate: Date;
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
-        email: string | null;
         notes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
     }[]>;
     createIntern(body: Record<string, unknown>): Promise<{
         id: string;
+        email: string | null;
         name: string;
+        division: string;
+        team: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
-        division: string;
-        team: string;
         position: string | null;
         leader: string | null;
         location: string | null;
@@ -94,21 +97,21 @@ export declare class AppService {
         durationLabel: string | null;
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
-        email: string | null;
         notes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
     }>;
     updateIntern(id: string, body: Record<string, unknown>): Promise<{
         id: string;
+        email: string | null;
         name: string;
+        division: string;
+        team: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
-        division: string;
-        team: string;
         position: string | null;
         leader: string | null;
         location: string | null;
@@ -117,21 +120,21 @@ export declare class AppService {
         durationLabel: string | null;
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
-        email: string | null;
         notes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
     }>;
     deleteIntern(id: string): Promise<{
         id: string;
+        email: string | null;
         name: string;
+        division: string;
+        team: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
-        division: string;
-        team: string;
         position: string | null;
         leader: string | null;
         location: string | null;
@@ -140,12 +143,9 @@ export declare class AppService {
         durationLabel: string | null;
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
-        email: string | null;
         notes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
     }>;
     getCosts(query: Record<string, string>): Promise<{
         rows: {
@@ -153,12 +153,15 @@ export declare class AppService {
                 normalizedDivision: string;
                 status: import("../domain/internship.logic.js").InternshipStatus;
                 id: string;
+                email: string | null;
                 name: string;
+                division: string;
+                team: string;
+                createdAt: Date;
+                updatedAt: Date;
                 type: import("@prisma/client").$Enums.InternshipType;
                 institution: string | null;
                 major: string | null;
-                division: string;
-                team: string;
                 position: string | null;
                 leader: string | null;
                 location: string | null;
@@ -167,28 +170,25 @@ export declare class AppService {
                 durationLabel: string | null;
                 manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
                 phone: string | null;
-                email: string | null;
                 notes: string | null;
                 acceptanceLetterSent: boolean;
                 sourceSheet: string | null;
-                createdAt: Date;
-                updatedAt: Date;
             };
             benefitScheme: {
                 id: string;
                 name: string;
-                type: import("@prisma/client").$Enums.InternshipType;
-                notes: string | null;
                 createdAt: Date;
                 updatedAt: Date;
+                type: import("@prisma/client").$Enums.InternshipType;
+                notes: string | null;
                 baseSalary: number;
                 mealAllowancePerDay: number;
             } | null;
             id: string;
             internId: string;
-            benefitSchemeId: string | null;
             month: number;
             year: number;
+            benefitSchemeId: string | null;
             baseSalary: number;
             mealAllowancePerDay: number;
             workingDays: number;
@@ -205,13 +205,21 @@ export declare class AppService {
             value: number;
         }[];
         total: number;
+        trend: {
+            name: string;
+            value: number;
+        }[];
+        costTrend: {
+            name: string;
+            value: number;
+        }[];
     }>;
     updateMonthlyCost(internId: string, year: number, month: number, body: Record<string, unknown>): Promise<{
         id: string;
         internId: string;
-        benefitSchemeId: string | null;
         month: number;
         year: number;
+        benefitSchemeId: string | null;
         baseSalary: number;
         mealAllowancePerDay: number;
         workingDays: number;
@@ -239,6 +247,8 @@ export declare class AppService {
     getPlans(query: Record<string, string>): Promise<{
         id: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
@@ -246,8 +256,6 @@ export declare class AppService {
         phone: string | null;
         notes: string | null;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
         targetDivision: string;
         targetTeam: string;
         acceptanceLetterDate: Date | null;
@@ -263,6 +271,8 @@ export declare class AppService {
     createPlan(body: Record<string, unknown>): Promise<{
         id: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
@@ -270,8 +280,6 @@ export declare class AppService {
         phone: string | null;
         notes: string | null;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
         targetDivision: string;
         targetTeam: string;
         acceptanceLetterDate: Date | null;
@@ -284,6 +292,8 @@ export declare class AppService {
     updatePlanStatus(id: string, body: Record<string, unknown>): Promise<{
         id: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
@@ -291,8 +301,6 @@ export declare class AppService {
         phone: string | null;
         notes: string | null;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
         targetDivision: string;
         targetTeam: string;
         acceptanceLetterDate: Date | null;
@@ -305,6 +313,8 @@ export declare class AppService {
     deletePlan(id: string): Promise<{
         id: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
         type: import("@prisma/client").$Enums.InternshipType;
         institution: string | null;
         major: string | null;
@@ -312,8 +322,6 @@ export declare class AppService {
         phone: string | null;
         notes: string | null;
         sourceSheet: string | null;
-        createdAt: Date;
-        updatedAt: Date;
         targetDivision: string;
         targetTeam: string;
         acceptanceLetterDate: Date | null;
@@ -329,8 +337,8 @@ export declare class AppService {
         intern: {
             checklist: {
                 id: string;
-                notes: string | null;
                 updatedAt: Date;
+                notes: string | null;
                 internId: string;
                 leaderEvaluationForm: boolean;
                 completionForm: boolean;
@@ -354,12 +362,15 @@ export declare class AppService {
             } | null;
         } & {
             id: string;
+            email: string | null;
             name: string;
+            division: string;
+            team: string;
+            createdAt: Date;
+            updatedAt: Date;
             type: import("@prisma/client").$Enums.InternshipType;
             institution: string | null;
             major: string | null;
-            division: string;
-            team: string;
             position: string | null;
             leader: string | null;
             location: string | null;
@@ -368,20 +379,17 @@ export declare class AppService {
             durationLabel: string | null;
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
-            email: string | null;
             notes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
-            createdAt: Date;
-            updatedAt: Date;
         };
         id: string;
         internId: string;
     }[]>;
     updateCompletion(internId: string, body: Record<string, unknown>): Promise<{
         id: string;
-        notes: string | null;
         updatedAt: Date;
+        notes: string | null;
         internId: string;
         leaderEvaluationForm: boolean;
         completionForm: boolean;
@@ -417,8 +425,8 @@ export declare class AppService {
             durationLabel: string;
             checklist: {
                 id: string;
-                notes: string | null;
                 updatedAt: Date;
+                notes: string | null;
                 internId: string;
                 leaderEvaluationForm: boolean;
                 completionForm: boolean;
@@ -441,12 +449,15 @@ export declare class AppService {
                 finalStatus: string;
             } | null;
             id: string;
+            email: string | null;
             name: string;
+            division: string;
+            team: string;
+            createdAt: Date;
+            updatedAt: Date;
             type: import("@prisma/client").$Enums.InternshipType;
             institution: string | null;
             major: string | null;
-            division: string;
-            team: string;
             position: string | null;
             leader: string | null;
             location: string | null;
@@ -454,12 +465,9 @@ export declare class AppService {
             endDate: Date;
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
-            email: string | null;
             notes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
-            createdAt: Date;
-            updatedAt: Date;
         }[];
     }>;
     getNotifications(): Promise<import("../domain/internship.logic.js").NotificationItem[]>;
