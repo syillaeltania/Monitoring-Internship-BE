@@ -72,6 +72,10 @@ model Intern {
   phone              String?
   email              String?
   notes              String?
+  qaSelfLearning     Boolean?
+  qaPretestScore     Float?
+  qaPosttestScore    Float?
+  qaNotes            String?
   acceptanceLetterSent Boolean        @default(false)
   sourceSheet        String?
   createdAt          DateTime         @default(now())

@@ -608,10 +608,20 @@ let AppService = class AppService {
             'phone',
             'email',
             'notes',
+            'qaNotes',
         ];
         for (const field of stringFields) {
             if (field in body)
                 data[field] = String(body[field] ?? '');
+        }
+        if ('qaSelfLearning' in body) {
+            data.qaSelfLearning = body.qaSelfLearning === true;
+        }
+        if ('qaPretestScore' in body) {
+            data.qaPretestScore = body.qaPretestScore === null ? null : Number(body.qaPretestScore) || 0;
+        }
+        if ('qaPosttestScore' in body) {
+            data.qaPosttestScore = body.qaPosttestScore === null ? null : Number(body.qaPosttestScore) || 0;
         }
         if (body.type === 'PROFESSIONAL' || body.type === 'INSTITUTION') {
             data.type = body.type;

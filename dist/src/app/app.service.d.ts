@@ -75,6 +75,10 @@ export declare class AppService {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }[]>;
@@ -98,6 +102,10 @@ export declare class AppService {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -121,6 +129,10 @@ export declare class AppService {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -144,6 +156,10 @@ export declare class AppService {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -171,6 +187,10 @@ export declare class AppService {
                 manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
                 phone: string | null;
                 notes: string | null;
+                qaSelfLearning: boolean | null;
+                qaPretestScore: number | null;
+                qaPosttestScore: number | null;
+                qaNotes: string | null;
                 acceptanceLetterSent: boolean;
                 sourceSheet: string | null;
             };
@@ -404,6 +424,10 @@ export declare class AppService {
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
             notes: string | null;
+            qaSelfLearning: boolean | null;
+            qaPretestScore: number | null;
+            qaPosttestScore: number | null;
+            qaNotes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
         };
@@ -490,6 +514,10 @@ export declare class AppService {
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
             notes: string | null;
+            qaSelfLearning: boolean | null;
+            qaPretestScore: number | null;
+            qaPosttestScore: number | null;
+            qaNotes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
         }[];

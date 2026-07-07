@@ -91,6 +91,10 @@ export declare class AppController {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }[]>;
@@ -114,6 +118,10 @@ export declare class AppController {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -137,6 +145,10 @@ export declare class AppController {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -160,6 +172,10 @@ export declare class AppController {
         manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
         phone: string | null;
         notes: string | null;
+        qaSelfLearning: boolean | null;
+        qaPretestScore: number | null;
+        qaPosttestScore: number | null;
+        qaNotes: string | null;
         acceptanceLetterSent: boolean;
         sourceSheet: string | null;
     }>;
@@ -187,6 +203,10 @@ export declare class AppController {
                 manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
                 phone: string | null;
                 notes: string | null;
+                qaSelfLearning: boolean | null;
+                qaPretestScore: number | null;
+                qaPosttestScore: number | null;
+                qaNotes: string | null;
                 acceptanceLetterSent: boolean;
                 sourceSheet: string | null;
             };
@@ -202,9 +222,9 @@ export declare class AppController {
             } | null;
             id: string;
             internId: string;
+            benefitSchemeId: string | null;
             month: number;
             year: number;
-            benefitSchemeId: string | null;
             baseSalary: number;
             mealAllowancePerDay: number;
             workingDays: number;
@@ -257,9 +277,9 @@ export declare class AppController {
     updateCost(internId: string, year: string, month: string, body: Record<string, unknown>): Promise<{
         id: string;
         internId: string;
+        benefitSchemeId: string | null;
         month: number;
         year: number;
-        benefitSchemeId: string | null;
         baseSalary: number;
         mealAllowancePerDay: number;
         workingDays: number;
@@ -416,6 +436,10 @@ export declare class AppController {
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
             notes: string | null;
+            qaSelfLearning: boolean | null;
+            qaPretestScore: number | null;
+            qaPosttestScore: number | null;
+            qaNotes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
         };
@@ -502,6 +526,10 @@ export declare class AppController {
             manualStatus: import("@prisma/client").$Enums.InternshipStatus | null;
             phone: string | null;
             notes: string | null;
+            qaSelfLearning: boolean | null;
+            qaPretestScore: number | null;
+            qaPosttestScore: number | null;
+            qaNotes: string | null;
             acceptanceLetterSent: boolean;
             sourceSheet: string | null;
         }[];
