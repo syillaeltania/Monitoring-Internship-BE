@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service.js';
 import { AppService } from './app.service.js';
 
@@ -57,6 +57,17 @@ export class AppController {
   @Get('replacement')
   replacement() {
     return this.appService.getReplacement();
+  }
+
+  @Put('replacement/reorder')
+  reorderReplacement(@Body() body: { orders: { id: string; orderNo: number }[] }) {
+    console.log('reorder payload:', body);
+    return this.appService.reorderTeamRequirements(body.orders);
+  }
+
+  @Patch('replacement/:id/visibility')
+  toggleVisibility(@Param('id') id: string, @Body() body: { isHidden: boolean }) {
+    return this.appService.toggleTeamVisibility(id, body.isHidden);
   }
 
   @Get('plans')

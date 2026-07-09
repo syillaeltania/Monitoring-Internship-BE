@@ -129,11 +129,43 @@ let AppService = class AppService {
         });
     }
     async updateIntern(id, body) {
+        const existingIntern = await this.prisma.intern.findUnique({ where: { id } });
         const data = this.buildInternUpdateData(body);
-        return this.prisma.intern.update({
+        const updated = await this.prisma.intern.update({
             where: { id },
             data,
         });
+        if (existingIntern) {
+            // Find the corresponding plan using the original name, type, and start date
+            const plan = await this.prisma.internshipPlan.findFirst({
+                where: {
+                    name: existingIntern.name,
+                    type: existingIntern.type,
+                    plannedStartDate: existingIntern.startDate,
+                },
+            });
+            if (plan) {
+                // Calculate the new status
+                const calculatedStatus = calculateStatus(updated.startDate.toISOString().slice(0, 10), updated.endDate.toISOString().slice(0, 10), new Date(), updated.manualStatus === 'TERMINATED');
+                // Sync the updated data back to the plan
+                await this.prisma.internshipPlan.update({
+                    where: { id: plan.id },
+                    data: {
+                        name: updated.name,
+                        type: updated.type,
+                        targetDivision: updated.division,
+                        targetTeam: updated.team,
+                        leader: updated.leader ?? '',
+                        plannedStartDate: updated.startDate,
+                        plannedEndDate: updated.endDate,
+                        phone: updated.phone ?? '',
+                        notes: updated.notes ?? '',
+                        processStatus: calculatedStatus === 'ACTIVE' && plan.processStatus === 'COMPLETED' ? 'ACTIVE' : undefined,
+                    },
+                });
+            }
+        }
+        return updated;
     }
     async deleteIntern(id) {
         return this.prisma.intern.delete({
@@ -309,7 +341,7 @@ let AppService = class AppService {
     }
     async getReplacement() {
         await this.recalculateTeamRequirements();
-        const rows = await this.prisma.teamRequirement.findMany({ orderBy: [{ division: 'asc' }, { team: 'asc' }] });
+        const rows = await this.prisma.teamRequirement.findMany({ orderBy: [{ division: 'asc' }, { orderNo: 'asc' }, { team: 'asc' }] });
         return rows.map((row) => ({
             ...row,
             replacementStatus: evaluateReplacementStatus({
@@ -319,6 +351,20 @@ let AppService = class AppService {
                 minimumInstitutionNeed: row.minimumInstitutionNeed,
             }),
         }));
+    }
+    async reorderTeamRequirements(orders) {
+        await this.prisma.$transaction(orders.map((item) => this.prisma.teamRequirement.update({
+            where: { id: item.id },
+            data: { orderNo: item.orderNo },
+        })));
+        return { success: true };
+    }
+    async toggleTeamVisibility(id, isHidden) {
+        await this.prisma.teamRequirement.update({
+            where: { id },
+            data: { isHidden },
+        });
+        return { success: true };
     }
     async getPlans(query) {
         await this.syncActivePlans();
@@ -656,7 +702,7 @@ let AppService = class AppService {
         return this.recalcPromise;
     }
     async _recalculateTeamRequirements() {
-        const activeInterns = (await this.getInterns({})).filter((intern) => intern.status === 'ACTIVE');
+        const allInterns = (await this.getInterns({})).filter(i => i.division && i.team);
         // 1. Reset counts of all existing requirements to 0
         await this.prisma.teamRequirement.updateMany({
             data: {
@@ -668,69 +714,133 @@ let AppService = class AppService {
         });
         const configs = await this.prisma.teamRequirement.findMany();
         const configMap = new Map();
-        const normalizeKey = (div, tm) => {
-            return `${div.trim().toUpperCase()}||${tm.trim()}`;
+        const normalizeDivision = (div) => {
+            const d = div.trim().toUpperCase().replace(/\s+/g, ' ');
+            if (d === 'NEW BUSINESS' || d === 'NB')
+                return 'NB';
+            return d;
+        };
+        const normalizeKey = (div, tm, pos) => {
+            const upperTeam = tm.trim().toUpperCase().replace(/\s+/g, ' ');
+            const upperPosition = (pos || '').toUpperCase().replace(/\s+/g, ' ');
+            let normalizedTeam = tm.trim();
+            if (upperTeam === 'LOGISTIK' || upperTeam === 'LOG')
+                normalizedTeam = 'LOGISTIC';
+            else if (upperTeam === 'SMART' && upperPosition.includes('PR'))
+                normalizedTeam = 'SMART (PR)';
+            else if (upperTeam === 'SMART' && upperPosition.includes('ADMIN'))
+                normalizedTeam = 'SMART (Admin)';
+            else if (upperTeam === 'SMART' && upperPosition.includes('WEBDEV'))
+                normalizedTeam = 'SMART (Webdev)';
+            else if (upperTeam === 'AM' && upperPosition.includes('QA'))
+                normalizedTeam = 'AM (QA)';
+            else if (upperTeam === 'AM' && upperPosition.includes('TW'))
+                normalizedTeam = 'AM (TW)';
+            else if (upperTeam === 'NB-3 (PGN BILIING)' || upperTeam === 'NB-3 (PGN BILLING)')
+                normalizedTeam = 'NB-3 (PGN Billing)';
+            else if (upperTeam === 'NB-4 (PEGADAIAN)' || upperTeam === 'NB-4 (PEGADAIAN)')
+                normalizedTeam = 'NB-4 (Pegadaian)';
+            // MSOS & SQ mappings
+            else if (upperTeam === 'MSOS-1' || upperTeam === 'MSOS 1' || upperTeam === 'MSO-1' || upperTeam === 'MSO 1')
+                normalizedTeam = 'MSO 1';
+            else if (upperTeam === 'MSOS-2' || upperTeam === 'MSOS 2' || upperTeam === 'MSO-2' || upperTeam === 'MSO 2')
+                normalizedTeam = 'MSO 2';
+            else if (upperTeam === 'MSOS-3' || upperTeam === 'MSOS 3' || upperTeam === 'MSO-3' || upperTeam === 'MSO 3')
+                normalizedTeam = 'MSO 3';
+            else if (upperTeam === 'MSOS-4' || upperTeam === 'MSOS 4' || upperTeam === 'MSO-4' || upperTeam === 'MSO 4')
+                normalizedTeam = 'MSO 4';
+            else if (upperTeam === 'MSOS-5' || upperTeam === 'MSOS 5' || upperTeam === 'MSO-5' || upperTeam === 'MSO 5')
+                normalizedTeam = 'MSO 5';
+            else if (upperTeam === 'MSOS-6' || upperTeam === 'MSOS 6' || upperTeam === 'MSO-6' || upperTeam === 'MSO 6')
+                normalizedTeam = 'MSO 6';
+            else if (upperTeam === 'SQ')
+                normalizedTeam = 'Software Quality';
+            return {
+                key: `${normalizeDivision(div)}||${normalizedTeam}`,
+                normalizedTeam
+            };
         };
         for (const config of configs) {
-            configMap.set(normalizeKey(config.division, config.team), config);
+            configMap.set(normalizeKey(config.division, config.team, config.notes).key, config);
         }
-        // 2. Group active interns by division and team
+        // 2. Group ALL interns by division and team to ensure we have configs for everyone
         const internGroups = new Map();
-        for (const intern of activeInterns) {
-            const key = `${intern.division.trim().toUpperCase()}||${intern.team.trim()}`;
+        for (const intern of allInterns) {
+            const key = normalizeKey(intern.division, intern.team, intern.position).key;
             internGroups.set(key, [...(internGroups.get(key) ?? []), intern]);
         }
         const processedIds = new Set();
         for (const [key, groupInterns] of internGroups.entries()) {
-            const division = groupInterns[0].division;
-            const team = groupInterns[0].team;
-            const normalized = normalizeKey(division, team);
-            const institution = groupInterns.filter((i) => i.type === 'INSTITUTION');
-            const professional = groupInterns.filter((i) => i.type === 'PROFESSIONAL');
+            const division = normalizeDivision(groupInterns[0].division);
+            const originalTeam = groupInterns[0].team;
+            const position = groupInterns[0].position;
+            const { key: normalized, normalizedTeam: team } = normalizeKey(division, originalTeam, position);
+            const activeGroupInterns = groupInterns.filter(i => {
+                const status = calculateStatus(i.startDate.toISOString().slice(0, 10), i.endDate.toISOString().slice(0, 10), new Date(), i.manualStatus === 'TERMINATED');
+                return status === 'ACTIVE';
+            });
+            const institution = activeGroupInterns.filter((i) => i.type === 'INSTITUTION');
+            const professional = activeGroupInterns.filter((i) => i.type === 'PROFESSIONAL');
             const soonest = [...institution].sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())[0];
             // Find matching config
             const config = configMap.get(normalized);
             const minimumNeed = config ? config.minimumInstitutionNeed : 1;
+            const uniqueLeaders = [...new Set(groupInterns.map(i => i.leader).filter(l => l && l !== '-'))].join(', ');
+            const uniquePositions = [...new Set(groupInterns.map(i => i.position).filter(p => p && p !== '-'))].join(', ');
             if (config) {
-                processedIds.add(config.id);
-                await this.prisma.teamRequirement.update({
-                    where: { id: config.id },
-                    data: {
-                        division, // Update division/team names to match active interns (fixing typos/casing!)
-                        team,
-                        leader: groupInterns[0]?.leader || config.leader || '',
-                        activeInstitutionCount: institution.length,
-                        activeProfessionalCount: professional.length,
-                        soonestEndDate: soonest?.endDate ?? null,
-                        endingInternName: soonest?.name ?? null,
-                        replacementStatus: evaluateReplacementStatus({
+                try {
+                    processedIds.add(config.id);
+                    await this.prisma.teamRequirement.update({
+                        where: { id: config.id },
+                        data: {
+                            division,
+                            team,
+                            leader: uniqueLeaders || config.leader || '',
+                            notes: uniquePositions || config.notes || '',
                             activeInstitutionCount: institution.length,
+                            activeProfessionalCount: professional.length,
                             soonestEndDate: soonest?.endDate ?? null,
-                            replacementCandidate: config.replacementCandidate,
-                            minimumInstitutionNeed: minimumNeed,
-                        }),
-                    },
-                });
+                            endingInternName: soonest?.name ?? null,
+                            replacementStatus: evaluateReplacementStatus({
+                                activeInstitutionCount: institution.length,
+                                soonestEndDate: soonest?.endDate ?? null,
+                                replacementCandidate: config.replacementCandidate,
+                                minimumInstitutionNeed: config.minimumInstitutionNeed
+                            })
+                        },
+                    });
+                }
+                catch (e) {
+                    console.error('Update failed for config:', config.id, 'with data:', { division, team }, e.message);
+                    // Swallowing error to prevent full crash
+                }
             }
             else {
-                await this.prisma.teamRequirement.create({
-                    data: {
-                        division,
-                        team,
-                        leader: groupInterns[0]?.leader || '',
-                        activeInstitutionCount: institution.length,
-                        activeProfessionalCount: professional.length,
-                        soonestEndDate: soonest?.endDate ?? null,
-                        endingInternName: soonest?.name ?? null,
-                        minimumInstitutionNeed: 1,
-                        replacementStatus: evaluateReplacementStatus({
+                try {
+                    await this.prisma.teamRequirement.create({
+                        data: {
+                            division,
+                            team,
+                            leader: uniqueLeaders || '',
+                            notes: uniquePositions || '',
                             activeInstitutionCount: institution.length,
+                            activeProfessionalCount: professional.length,
+                            minimumInstitutionNeed: 1, // Default,
                             soonestEndDate: soonest?.endDate ?? null,
-                            replacementCandidate: null,
-                            minimumInstitutionNeed: 1,
-                        }),
-                    },
-                });
+                            endingInternName: soonest?.name ?? null,
+                            replacementStatus: evaluateReplacementStatus({
+                                activeInstitutionCount: institution.length,
+                                soonestEndDate: soonest?.endDate ?? null,
+                                replacementCandidate: '',
+                                minimumInstitutionNeed: 1, // Default
+                            }),
+                        },
+                    });
+                }
+                catch (e) {
+                    console.error('Create failed with data:', { division, team }, e.message);
+                    // Swallowing error to prevent full crash
+                }
             }
         }
         // 3. For remaining configs (which have 0 active interns), evaluate status or delete if default/unused

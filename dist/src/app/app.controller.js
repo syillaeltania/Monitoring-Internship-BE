@@ -10,7 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service.js';
 import { AppService } from './app.service.js';
 let AppController = class AppController {
@@ -46,6 +46,13 @@ let AppController = class AppController {
     }
     replacement() {
         return this.appService.getReplacement();
+    }
+    reorderReplacement(body) {
+        console.log('reorder payload:', body);
+        return this.appService.reorderTeamRequirements(body.orders);
+    }
+    toggleVisibility(id, body) {
+        return this.appService.toggleTeamVisibility(id, body.isHidden);
     }
     plans(query) {
         return this.appService.getPlans(query);
@@ -141,6 +148,21 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], AppController.prototype, "replacement", null);
+__decorate([
+    Put('replacement/reorder'),
+    __param(0, Body()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "reorderReplacement", null);
+__decorate([
+    Patch('replacement/:id/visibility'),
+    __param(0, Param('id')),
+    __param(1, Body()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "toggleVisibility", null);
 __decorate([
     Get('plans'),
     __param(0, Query()),
