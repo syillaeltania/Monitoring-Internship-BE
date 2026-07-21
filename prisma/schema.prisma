@@ -42,6 +42,21 @@ enum ReplacementStatus {
   URGENT_EMPTY
 }
 
+enum IssueType {
+  ADMINISTRASI
+  KEHADIRAN
+  PERFORMA
+  PERILAKU
+  RESIGN
+  LAINNYA
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -83,6 +98,7 @@ model Intern {
   costs              MonthlyCost[]
   checklist          CompletionChecklist?
   evaluations        LeaderEvaluation[]
+  issues             InternIssue[]
 
   @@index([type, division, team])
   @@index([startDate, endDate])
@@ -211,4 +227,22 @@ model LeaderEvaluation {
   evidence  String?
   intern    Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+model InternIssue {
+  id             String      @id @default(cuid())
+  internId       String
+  intern         Intern      @relation(fields: [internId], references: [id], onDelete: Cascade)
+  type           IssueType[]
+  description    String
+  reportedDate   DateTime
+  followUpAction String?
+  status         IssueStatus @default(OPEN)
+  resolvedDate   DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([internId])
+  @@index([status])
+  @@index([reportedDate])
 }

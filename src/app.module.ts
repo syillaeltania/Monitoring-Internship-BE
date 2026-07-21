@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AppController } from './app/app.controller.js';
+import { IssueController } from './app/issue.controller.js';
 import { AppService } from './app/app.service.js';
 import { AuthService } from './auth/auth.service.js';
 import { PrismaService } from './prisma/prisma.service.js';
@@ -15,7 +16,7 @@ import { PrismaService } from './prisma/prisma.service.js';
       signOptions: { expiresIn: '8h' },
     }),
   ],
-  controllers: [AppController],
+  controllers: [AppController, IssueController],
   providers: [AppService, AuthService, PrismaService],
 })
 export class AppModule {}
