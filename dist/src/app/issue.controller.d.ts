@@ -79,6 +79,10 @@ export declare class IssueController {
                 name: string;
                 value: number;
             }[];
+            trend: {
+                name: string;
+                value: number;
+            }[];
         };
     }>;
 }

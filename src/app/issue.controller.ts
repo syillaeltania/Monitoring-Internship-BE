@@ -173,6 +173,25 @@ export class IssueController {
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
+    // Trend per bulan (selalu sepanjang tahun yang dipilih)
+    const yearStartDate = new Date(y, 0, 1);
+    const yearEndDate = new Date(y, 11, 31, 23, 59, 59, 999);
+    
+    const yearIssues = month ? await this.prisma.internIssue.findMany({
+      where: { reportedDate: { gte: yearStartDate, lte: yearEndDate } },
+      select: { reportedDate: true },
+    }) : issues;
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const byMonth = yearIssues.reduce((acc: Record<string, number>, issue: any) => {
+      const m = new Date(issue.reportedDate).getMonth();
+      const monthName = monthNames[m];
+      acc[monthName] = (acc[monthName] || 0) + 1;
+      return acc;
+    }, {});
+
+    const chartTrend = monthNames.map(name => ({ name, value: byMonth[name] || 0 }));
+
     return {
       summary: {
         totalActive,
@@ -185,6 +204,7 @@ export class IssueController {
         byType: chartByType,
         byDivision: chartByDivision,
         byInstitution: chartByInstitution,
+        trend: chartTrend,
       },
     };
   }

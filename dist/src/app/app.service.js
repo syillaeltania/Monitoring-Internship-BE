@@ -527,7 +527,17 @@ let AppService = class AppService {
             orderBy: [{ endDate: 'asc' }, { name: 'asc' }],
         });
         return interns
-            .filter((intern) => calculateStatus(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10), today, intern.manualStatus === 'TERMINATED') === 'ACTIVE')
+            .filter((intern) => {
+            const status = calculateStatus(intern.startDate.toISOString().slice(0, 10), intern.endDate.toISOString().slice(0, 10), today, intern.manualStatus === 'TERMINATED');
+            if (status === 'ACTIVE')
+                return true;
+            if (status === 'COMPLETED') {
+                // Hanya tampilkan yang selesai pada atau setelah 24 Juli 2026
+                const threshold = new Date('2026-07-24T00:00:00Z');
+                return intern.endDate >= threshold;
+            }
+            return false;
+        })
             .map((intern) => ({
             id: intern.checklist?.id ?? `pending-${intern.id}`,
             internId: intern.id,
@@ -561,7 +571,6 @@ let AppService = class AppService {
                     where: {
                         name: intern.name,
                         type: intern.type,
-                        plannedStartDate: intern.startDate,
                     },
                     data: { processStatus: 'COMPLETED' },
                 });
