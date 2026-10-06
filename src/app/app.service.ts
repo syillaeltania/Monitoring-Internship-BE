@@ -94,7 +94,10 @@ export class AppService {
         currentMonthCost: monthCosts.reduce((sum, item) => sum + item.totalMonthlyCost, 0),
       },
       charts: {
-        byDivision: this.countBy(active, 'division'),
+        byDivision: this.countBy(
+          active.map((item) => ({ ...item, division: this.normalizeDivision(item.division) })),
+          'division',
+        ),
         byType: this.countBy(active, 'type'),
         monthlyCost: this.monthlyCostSeries(interns.flatMap((intern) => intern.costs)),
       },
